@@ -1,0 +1,236 @@
+---
+title: "Regressão linear na prática"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(broom)
+library(modelr)
+source(here::here("code/lib.R"))
+theme_set(theme_bw())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      fig.width = 6,
+                      fig.height = 5)
+
+paleta = c("#404E4D",
+           "#92DCE5",
+           "#938BA1",
+           "#2D3142",
+           "#F4743B")
+```
+
+## Dados da CAPES sobre avaliação da pós-graduação
+
+A CAPES é um órgão do MEC que tem a atribuição de acompanhar a pós-graduação na universidade brasileira. Uma das formas que ela encontrou de fazer isso e pela qual ela é bastante criticada é através de uma avaliação quantitativa a cada x anos (era 3, mudou para 4). 
+
+Usaremos dados da penúltima avaliação da CAPES: 
+
+```{r}
+cacc_tudo = read_projectdata()
+
+glimpse(cacc_tudo)
+```
+
+### Produção e produtividade de artigos
+
+Uma das maneiras de avaliar a produção dos docentes que a CAPES utiliza é quantificando a produção de artigos pelos docentes. Os artigos são categorizados em extratos ordenados (A1 é o mais alto), e separados entre artigos em conferências e periódicos. Usaremos para esse lab a produção em periódicos avaliados com A1, A2 e B1. 
+
+```{r}
+cacc = cacc_tudo %>%
+  transmute(
+    docentes = `Docentes permanentes`,
+    producao = (periodicos_A1 + periodicos_A2 + periodicos_B1),
+    produtividade = producao / docentes,
+    mestrados = Dissertacoes,
+    doutorados = Teses,
+    tem_doutorado = tolower(`Tem doutorado`) == "sim",
+    mestrados_pprof = mestrados / docentes,
+    doutorados_pprof = doutorados / docentes
+  )
+
+cacc_md = cacc %>% 
+  filter(tem_doutorado)
+```
+
+
+### EDA
+
+```{r}
+skimr::skim(cacc)
+```
+
+
+```{r}
+cacc %>% 
+  ggplot(aes(x = docentes)) + 
+  geom_histogram(bins = 15, fill = paleta[1])
+
+cacc %>% 
+  ggplot(aes(x = producao)) + 
+  geom_histogram(bins = 15, fill = paleta[2])
+
+cacc %>% 
+  ggplot(aes(x = produtividade)) + 
+  geom_histogram(bins = 15, fill = paleta[3])
+```
+
+Se quisermos modelar o efeito do tamanho do programa em termos de docentes (permanentes) na quantidade de artigos publicados, podemos usar regressão. 
+
+*Importante*: sempre queremos ver os dados antes de fazermos qualquer modelo ou sumário: 
+
+```{r}
+cacc %>% 
+  ggplot(aes(x = docentes, y = producao)) + 
+  geom_point()
+```
+
+Parece que existe uma relação. Vamos criar um modelo então:
+
+```{r}
+modelo1 = lm(producao ~ docentes, data = cacc)
+
+tidy(modelo1, conf.int = TRUE, conf.level = 0.95)
+glance(modelo1)
+```
+
+Para visualizar o modelo:
+
+```{r}
+cacc_augmented = cacc %>% 
+  add_predictions(modelo1) 
+
+cacc_augmented %>% 
+  ggplot(aes(x = docentes)) + 
+  geom_line(aes(y = pred), colour = "brown") + 
+  geom_point(aes(y = producao)) + 
+  labs(y = "Produção do programa")
+```
+
+Se considerarmos que temos apenas uma amostra de todos os programas de pós em CC no Brasil, o que podemos inferir a partir desse modelo sobre a relação entre número de docentes permanentes e produção de artigos em programas de pós? 
+
+Normalmente reportaríamos o resultado da seguinte maneira, substituindo VarIndepX e todos os x's e y's pelos nomes e valores de fato:
+
+> Regressão múltipla foi utilizada para analisar se VarIndep1 e VarIndep2 tem uma associação significativa com VarDep. Os resultados da regressão indicam que um modelo com os 2 preditores no formato VarDep = XXX.VarIndep1 + YYY.VarIndep2 explicam XX,XX% da variância da variável de resposta (R2 = XX,XX). VarIndep1, medida como/em [unidade ou o que é o 0 e o que é 1] tem uma relação significativa com o erro (b = [yy,yy; zz,zz], IC com 95%), assim como VarIndep2 medida como [unidade ou o que é o 0 e o que é 1] (b = [yy,yy; zz,zz], IC com 95%). O aumento de 1 unidade de VarIndep1 produz uma mudança de xxx em VarDep, enquanto um aumento...
+
+Produza aqui a sua versão desse texto, portanto:
+
+-----
+
+A regressão linear simples foi utilizada para analisar se o número de docentes permanentes tem uma associação significativa com a produção de artigos. Os resultados da regressão indicam que o modelo no formato Produção = -41.3 + 4.81 * Docentes explica 81.5% da variância na produção de artigos (R² = 0.815). O número de docentes permanentes tem uma relação significativa com a produção de artigos (b = 4.81; IC com 95%: [4.27, 5.36]). Um aumento de 1 unidade no número de docentes permanentes resulta em um aumento de aproximadamente 4.81 na produção de artigos.
+
+-----
+
+Dito isso, o que significa a relação que você encontrou na prática para entendermos os programas de pós graduação no Brasil? E algum palpite de por que a relação que encontramos é forte?
+
+-----
+
+A análise dos dados revela uma associação estatisticamente significativa entre o número de docentes permanentes e a produção científica em programas de pós-graduação. Especificamente, observa-se que programas com um maior quantitativo de docentes tendem a apresentar um volume superior de publicações em periódicos qualificados.
+
+Essa relação pode ser explicada pelo papel central que os docentes desempenham na estrutura acadêmica: eles são os principais responsáveis pela condução de projetos de pesquisa, pela orientação de discentes e pela articulação de redes de colaboração científica. Assim, um corpo docente mais robusto não apenas amplia a capacidade operacional do programa, mas também potencializa a geração de conhecimento novo e sua divulgação por meio de publicações científicas.
+
+-----
+
+## Mais fatores
+
+```{r}
+modelo2 = lm(producao ~ docentes + mestrados_pprof + doutorados_pprof + tem_doutorado, 
+             data = cacc_md)
+
+tidy(modelo2, conf.int = TRUE, conf.level = 0.95)
+glance(modelo2)
+```
+
+E se considerarmos também o número de alunos?
+
+```{r}
+modelo2 = lm(producao ~ docentes + mestrados + doutorados, data = cacc)
+
+tidy(modelo2, conf.int = TRUE, conf.level = 0.95)
+glance(modelo2)
+```
+
+Visualizar o modelo com muitas variáveis independentes fica mais difícil
+
+```{r}
+para_plotar_modelo = cacc %>% 
+  data_grid(producao = seq_range(producao, 10), # Crie um vetor de 10 valores no range
+            docentes = seq_range(docentes, 4),  
+            # mestrados = seq_range(mestrados, 3),
+            mestrados = median(mestrados),
+            doutorados = seq_range(doutorados, 3)) %>% 
+  add_predictions(modelo2)
+
+glimpse(para_plotar_modelo)
+
+```
+
+```{r}
+para_plotar_modelo %>% 
+  ggplot(aes(x = docentes, y = pred)) + 
+  geom_line(aes(group = doutorados, colour = doutorados)) + 
+  geom_point(data = cacc, aes(y = producao, colour = doutorados))
+```
+
+Considerando agora esses três fatores, o que podemos dizer sobre como cada um deles se relaciona com a produção de um programa de pós em CC? E sobre o modelo? Ele explica mais que o modelo 1? 
+
+-----
+
+A análise por regressão múltipla indica que o número de docentes permanentes, de dissertações de mestrado e de teses de doutorado está significativamente associado à produção de artigos nos programas de pós-graduação. O modelo, expresso por:
+Produção = -14,4 + 3,50 * Docentes - 0,19 * Mestrados + 1,00 * Doutorados,
+apresenta um coeficiente de determinação elevado (R² = 0,871), o que demonstra que aproximadamente 87% da variabilidade na produção de artigos pode ser explicada por essas três variáveis.
+
+Especificamente, o número de docentes e de doutorados possui efeito positivo e estatisticamente significativo sobre a produção, sugerindo que programas com mais professores e maior formação de doutores tendem a apresentar maior volume de publicações científicas. Por outro lado, o número de dissertações de mestrado mostrou uma associação negativa e também significativa, embora com menor magnitude, o que pode indicar que programas muito focados em mestrados podem apresentar menor produtividade em publicações de alto impacto, possivelmente devido ao caráter mais aplicado ou de menor exigência em termos de produção científica do mestrado.
+
+Em comparação com o modelo anterior — que considerava apenas o número de docentes —, este modelo mais completo apresenta maior capacidade explicativa. Isso reforça a ideia de que, além do tamanho do corpo docente, a composição e o nível de formação discente também são determinantes importantes da produção científica em programas de pós-graduação. Assim, políticas voltadas à ampliação do quadro de docentes e à consolidação da formação doutoral podem representar estratégias eficazes para o fortalecimento da produção acadêmica nacional.
+
+-----
+
+
+## Agora produtividade 
+
+Diferente de medirmos produção (total produzido), é medirmos produtividade (produzido / utilizado). Abaixo focaremos nessa análise. Para isso crie um modelo que investiga como um conjunto de fatores que você julga que são relevantes se relacionam com a produtividade dos programas. Crie um modelo que avalie como _pelo menos 3 fatores_ se relacionam com a produtividade de um programa. Pode reutilizar fatores que já definimos e analizamos para produção. Mas cuidado para não incluir fatores que sejam função linear de outros já incluídos (ex: incluir A, B e um tercero C=A+B)
+
+Produza abaixo o modelo e um texto que comente (i) o modelo, tal como os que fizemos antes, e (ii) as implicações - o que aprendemos sobre como funcionam programas de pós no brasil?.
+
+```{r}
+modelo_produtividade = lm(produtividade ~ docentes + mestrados_pprof + doutorados_pprof, data = cacc_md)
+summary(modelo_produtividade)
+```
+
+```{r}
+cacc_md = cacc_md %>% 
+  add_predictions(modelo_produtividade, var = "pred_produtividade")
+cacc_md %>% 
+  ggplot(aes(x = docentes, y = produtividade)) +
+  geom_point() +
+  geom_line(aes(y = pred_produtividade), color = "purple") +
+  labs(y = "Produtividade (Artigos por Docente)", x = "Número de Docentes Permanentes")
+```
+
+```{r}
+tidy(modelo_produtividade, conf.int = TRUE)
+
+glance(modelo_produtividade)
+```
+
+Foi utilizada uma regressão linear múltipla para analisar como o número de docentes permanentes, o número de mestrados por docente e o número de doutorados por docente se relacionam com a produtividade dos programas de pós-graduação, medida em termos de artigos publicados por docente. O modelo foi definido da seguinte maneira:
+
+Produtividade = 𝛽₀ + 𝛽₁ ⋅ Docentes + 𝛽₂ ⋅ Mestrados por Docente + 𝛽₃ ⋅ Doutorados por Docente
+
+Os resultados da regressão indicam que o modelo estimado:
+
+Produtividade = 2,44 + 0,006 ⋅ Docentes + 0,021 ⋅ Mestrados por Docente + 0,670 ⋅ Doutorados por Docente
+
+foi capaz de explicar aproximadamente 28,5% da variância observada na produtividade (R² = 0,285). Esse nível de explicação indica que uma parte relevante da variação na produtividade entre os programas pode ser prevista com base nesses três fatores, embora ainda haja outros elementos não incluídos no modelo que contribuem para a variação total.
+
+A análise individual dos coeficientes revelou que apenas a variável “Doutorados por Docente” apresentou significância estatística ao nível de 5% (p = 0,0175). Com coeficiente estimado em 0,670, isso indica que, para cada aumento unitário na proporção de doutorados por docente, a produtividade tende a aumentar, em média, em 0,67 artigos por docente. Esse resultado sugere que a formação de doutorandos está diretamente associada à maior produtividade científica, possivelmente refletindo a complexidade e o rigor dos projetos de pesquisa em nível de doutorado, que costumam gerar maior número de publicações.
+
+As outras duas variáveis — número de docentes permanentes (𝛽₁ = 0,006; p = 0,707) e mestrados por docente (𝛽₂ = 0,021; p = 0,841) — não apresentaram significância estatística, embora ambas tenham coeficientes positivos. Isso indica que, com os dados disponíveis, não há evidência estatística suficiente para afirmar que essas variáveis estão relacionadas de forma consistente com a produtividade. Ainda assim, a direção positiva dos coeficientes sugere uma possível tendência de contribuição, que poderia ser mais bem compreendida com uma amostra maior ou com a inclusão de outros fatores explicativos (como área de pesquisa, investimentos, tempo de existência do programa, entre outros).
+
+Esses achados indicam que programas que formam mais doutorandos por docente tendem a ser mais produtivos em termos de publicações. Isso reforça a importância da formação doutoral como um eixo estratégico para o fortalecimento da pesquisa científica nos programas de pós-graduação. Embora o número de docentes e a formação de mestres não tenham se mostrado estatisticamente significativos neste modelo específico, seus efeitos não devem ser descartados — eles podem atuar de forma indireta ou complementar na dinâmica da produtividade acadêmica.
+
+Em resumo, os resultados ressaltam a relevância de políticas voltadas ao fortalecimento da formação de doutores e ao aumento da capacidade de orientação dos docentes permanentes, como estratégias promissoras para o aprimoramento da produção científica dos programas de pós-graduação no Brasil.
